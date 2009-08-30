@@ -1,0 +1,23 @@
+0.71
+
+* Fix a broken regexp in manifest.skip which stopped SD on CPAN from having a pretty webui - thanks to Nelson Elhage
+* Added documentation about proper clone command to use with a local sd server - Pedro Melo
+* GitHub UI improvements and related updates for prompt_for_login API change - Christine Spang
+* In the Redmine tests, we weren't doing all of our test skips in the BEGIN {} block. Marcus Ramberg caught this
+* All help references for summary format should be 'ticket.summary-format' - Christine Spang
+* bugfix: be able to delete props that aren't in common_ticket_props from the  - Christine Spang
+editor - Christine Spang
+* Fix a help typo pointed out by Gerfried Fuchs - Christine Spang
+* Further fixes/clarifications for search help. - Christine Spang
+
+
+
+0.70 - 2009-08-26
+
+* Workaround for occasionally broken Ruby date formatting libraries in github replicas
+* Minor testing and formatting change
+
+0.69_01 - 2009-08-21
+
+* Initial release
+  - dev release to do CPAN smoking before official release

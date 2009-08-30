@@ -2,8 +2,6 @@ package App::SD::Replica::github::PushEncoder;
 use Any::Moose;
 use Params::Validate;
 use Path::Class;
-use Net::Google::Code::Issue;
-use Net::Google::Code;
 
 has sync_source => (
     isa => 'App::SD::Replica::github',
@@ -30,7 +28,6 @@ sub integrate_change {
         $changeset->original_source_uuid ) >= $changeset->original_sequence_no;
 
     my $before_integration = time();
-    my ( $email, $password );
 
     eval {
         if (    $change->record_type eq 'ticket'
@@ -104,7 +101,10 @@ sub integrate_ticket_create {
     my $attr = $self->_recode_props_for_integrate($change);
     my $new =
       $ticket->open( $attr->{title}, $attr->{body} );
-
+    # TODO: better error handler?
+    if ( $new->{error} ) {
+        die "\n\n$new->{error}";
+    }
     return $new->{number};
 }
 
