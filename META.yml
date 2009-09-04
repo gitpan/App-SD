@@ -34,4 +34,4 @@ requires:
   Prophet: 0
   Time::Progress: 0
   URI::file: 0
-version: 0.71
+version: 0.72

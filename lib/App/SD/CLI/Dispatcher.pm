@@ -20,6 +20,12 @@ on qr'^(?!help)' => sub {
     if ($self->context->has_arg('help')) {
         run("help $cmd", $self, @_);
     }
+    elsif ($self->context->has_arg('version')
+            || $self->context->has_arg('V') ) {
+        $self->context->delete_arg('version');
+        $self->context->delete_arg('V');
+        run("version", $self);
+    }
     else {
         next_rule;
     }
@@ -36,7 +42,7 @@ under help => sub {
     on [ ['author', 'authors'] ]         => run_command('Help::Authors');
     on [ ['environment', 'env'] ]        => run_command('Help::Environment');
     on [ ['ticket', 'tickets'] ]         => run_command('Help::Tickets');
-    on [ ['attachment', 'attachments'] ] => run_command('Help::Attachments');
+    on [ ['attach', 'attachment', 'attachments'] ] => run_command('Help::Attachments');
     on [ ['comment', 'comments'] ]       => run_command('Help::Comments');
     on [ ['setting', 'settings'] ]       => run_command('Help::Settings');
     on [ ['history', 'log'] ]            => run_command('Help::History');
