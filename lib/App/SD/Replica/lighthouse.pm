@@ -30,9 +30,7 @@ sub BUILD {
     my ( $auth, $account, $project, $query ) =
       $self->{url} =~ m{^lighthouse:(?:(.*)@)?(.*?)/(.*?)(?:/(.*))?$}
       or die
-        "Can't parse lighthouse server spec. Expected
-        lighthouse:email:password\@account/project/query or\n"
-        ."lighthouse:token\@account/project/query.";
+"Can't parse lighthouse server spec. Expected lighthouse:email:password\@account/project/query or lighthouse:token\@account/project/query.";
     my $server = "http://$account.lighthouseapp.com";
     $self->query( $query || 'all' );
 
@@ -165,7 +163,7 @@ sub database_settings {
     my $self = shift;
     return {
         project_name    => $self->account . '/' . $self->project,
-        active_statuses => $self->lighthouse->open_states_list,
+        active_statuses => [ $self->lighthouse->open_states_list ],
         statuses        => [
             @{ $self->lighthouse->open_states_list },
             @{ $self->lighthouse->closed_states_list }

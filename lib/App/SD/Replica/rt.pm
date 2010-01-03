@@ -23,12 +23,19 @@ sub BUILD {
     my $self = shift;
 
     # Require rather than use to defer load
-    require RT::Client::REST;
-    require RT::Client::REST::User;
-    require RT::Client::REST::Ticket;
+    eval {
+        require RT::Client::REST;
+        require RT::Client::REST::User;
+        require RT::Client::REST::Ticket;
+    };
+    if ($@) {
+        warn $@ if $ENV{PROPHET_DEBUG};
+        die "RT::Client::REST is required to sync with RT foreign replicas.\n";
+    }
 
-    my ( $server, $type, $query ) = $self->{url} =~ m/^rt:(.*?)\|(.*?)\|(.*)$/
-        or die "Can't parse RT server spec. Expected rt:http://example.com|QUEUE|QUERY. Try: rt:http://example.com/|General|";
+    my ( $server, $type, $query ) = $self->{url} =~ m{^rt:(https?://.*?)\|(.*?)\|(.*)$}
+        or die "Can't parse RT server spec. Expected 'rt:http://example.com|QUEUE|QUERY'.\n"
+                ."Try: 'rt:http://example.com/|General|'.\n";
     my $uri = URI->new($server);
     my ( $username, $password );
     if ( my $auth = $uri->userinfo ) {
@@ -48,7 +55,13 @@ sub BUILD {
 
     $self->rt_username($username);
 
-    $self->rt->login( username => $username, password => $password );
+    eval {
+        $self->rt->login( username => $username, password => $password );
+    };
+    if ($@) {
+        die "Login to '$server' with username '$username' failed!\n"
+            ."Error was: $@.\n";
+    }
 }
 
 sub foreign_username { return shift->rt_username(@_)}
