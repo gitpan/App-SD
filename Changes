@@ -1,3 +1,23 @@
+0.75
+
+The "this is getting ridiculous" release.
+
+User-visible highlights (not all commits are listed here):
+ * fix hiveminder logins when setting username/password via URL (spang)
+ * bump dependencies to fix bitrot (spang, obra, franck)
+ * foreign replicas now have better username/password prompting (spang)
+ * clean up hiveminder sync messages (spang)
+ * fix cloning from hiveminder (spang)
+ * progress bar cleanups on clone/pull (spang)
+ * publish --html works again (sunnavy, spang)
+ * new server default port that clashes less with other HTTP servers (spang)
+ * misc mac fixes (obra, sunnavy)
+ * make -h more discoverable (spang)
+ * new 'help commands' page (spang)
+ * 'help browser' and 'help clone' now point to sync help (obra, spang)
+ * mention --as and --local in clone usage messages (spang)
+ * add some SD-specific bash completion rules (jibsheet)
+
 0.74
 
 User-visible highlights for this release (not all commits are listed here):

@@ -5,6 +5,7 @@ extends qw/App::SD::ForeignReplica/;
 use Params::Validate qw(:all);
 use File::Temp 'tempdir';
 use Memoize;
+use Try::Tiny;
 
 use constant scheme => 'rt';
 use constant pull_encoder => 'App::SD::Replica::rt::PullEncoder';
@@ -13,59 +14,59 @@ use constant push_encoder => 'App::SD::Replica::rt::PushEncoder';
 
 use Prophet::ChangeSet;
 
-has rt => ( isa => 'RT::Client::REST', is => 'rw');
-has remote_url => ( isa => 'Str', is => 'rw');
-has rt_queue => ( isa => 'Str', is => 'rw');
-has query => ( isa => 'Str', is => 'rw');
-has rt_username => (isa => 'Str', is => 'rw');
+has rt               => ( isa => 'RT::Client::REST', is => 'rw');
+has remote_url       => ( isa => 'Str', is              => 'rw');
+has rt_queue         => ( isa => 'Str', is              => 'rw');
+has query            => ( isa => 'Str', is              => 'rw');
+has foreign_username => ( isa => 'Str', is              => 'rw' );
 
 sub BUILD {
     my $self = shift;
 
     # Require rather than use to defer load
-    eval {
+    try {
         require RT::Client::REST;
         require RT::Client::REST::User;
         require RT::Client::REST::Ticket;
-    };
-    if ($@) {
-        warn $@ if $ENV{PROPHET_DEBUG};
+    } catch {
+        warn $_ if $ENV{PROPHET_DEBUG};
         die "RT::Client::REST is required to sync with RT foreign replicas.\n";
-    }
+    };
 
     my ( $server, $type, $query ) = $self->{url} =~ m{^rt:(https?://.*?)\|(.*?)\|(.*)$}
         or die "Can't parse RT server spec. Expected 'rt:http://example.com|QUEUE|QUERY'.\n"
                 ."Try: 'rt:http://example.com/|General|'.\n";
     my $uri = URI->new($server);
-    my ( $username, $password );
-    if ( my $auth = $uri->userinfo ) {
-        ( $username, $password ) = split /:/, $auth, 2;
-        $uri->userinfo(undef);
-    }
-    $self->remote_url($uri->as_string);
+
+    my ($username, $password) = $self->extract_auth_from_uri($server);
+
     $self->rt_queue($type);
     $self->query( ( $query ?  "($query) AND " :"") . " Queue = '$type'" );
     $self->rt( RT::Client::REST->new( server => $server ) );
 
-    ( $username, $password )
-        = $self->prompt_for_login(
+    if ( $password ) {
+        try {
+            $self->rt->login( username => $username, password => $password );
+        } catch {
+            die "Bad username or password specified in URL! ".
+                "Error message was:\n$_\n";
+        };
+    }
+    else {
+        ($username, $password) = $self->login_loop(
             uri      => $uri,
             username => $username,
-        ) unless $password;
+            login_callback => sub {
+                my ($self, $username, $password) = @_;
 
-    $self->rt_username($username);
-
-    eval {
-        $self->rt->login( username => $username, password => $password );
-    };
-    if ($@) {
-        die "Login to '$server' with username '$username' failed!\n"
-            ."Error was: $@.\n";
+                $self->rt->login( username => $username, password => $password );
+            },
+        );
     }
 }
 
-sub foreign_username { return shift->rt_username(@_)}
-  
+sub foreign_username { return shift->rt_username(@_) }
+
 sub get_txn_list_by_date {
     my $self   = shift;
     my $ticket = shift;
@@ -90,9 +91,9 @@ Return the replica's UUID
 
 =cut
 
-sub uuid {
+sub _uuid_url {
     my $self = shift;
-    return $self->uuid_for_url( join( '/', $self->remote_url, $self->query ) );
+    return join( '/', $self->remote_url, $self->query );
 
 }
 
@@ -108,7 +109,7 @@ If the remote storage (RT) can not represent a whole changeset along with the pr
 create a seperate locally(?) stored map of:
     remote-subchangeset-identifier to changeset uuid.
     remote id to prophet record uuid
-    
+
 
 For each sync of the same remote source (RT), we need a unique prophet database domain.
 
@@ -127,12 +128,12 @@ apply a single changeset that's part of the push:
              - if it is _not_ from the changeset we just pushed, then 
                 do we just ignore it?
                 how do we mark an out-of-order transaction as not-pulled?
-                
+
 
 
 Changesets we want to push from SD to RT and how they map
 
-    
+
 what do we do with cfs rt doesn't know about?
 
 

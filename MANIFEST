@@ -5,11 +5,14 @@ Changes
 contrib/git-post-commit-close-ticket
 contrib/sdticket.vim
 doc/testing
+doc/write_a_connector
+etc/sd.bash
 inc/Module/AutoInstall.pm
 inc/Module/Install.pm
 inc/Module/Install/AutoInstall.pm
 inc/Module/Install/Base.pm
 inc/Module/Install/Can.pm
+inc/Module/Install/ExtraTests.pm
 inc/Module/Install/Fetch.pm
 inc/Module/Install/Include.pm
 inc/Module/Install/Makefile.pm
@@ -30,6 +33,7 @@ lib/App/SD/CLI/Command/Help/About.pm
 lib/App/SD/CLI/Command/Help/Aliases.pm
 lib/App/SD/CLI/Command/Help/Attachments.pm
 lib/App/SD/CLI/Command/Help/Authors.pm
+lib/App/SD/CLI/Command/Help/Commands.pm
 lib/App/SD/CLI/Command/Help/Comments.pm
 lib/App/SD/CLI/Command/Help/Config.pm
 lib/App/SD/CLI/Command/Help/Copying.pm
@@ -55,6 +59,7 @@ lib/App/SD/CLI/Command/Ticket/Comment/Update.pm
 lib/App/SD/CLI/Command/Ticket/Comments.pm
 lib/App/SD/CLI/Command/Ticket/Create.pm
 lib/App/SD/CLI/Command/Ticket/Details.pm
+lib/App/SD/CLI/Command/Ticket/Review.pm
 lib/App/SD/CLI/Command/Ticket/Search.pm
 lib/App/SD/CLI/Command/Ticket/Show.pm
 lib/App/SD/CLI/Command/Ticket/Update.pm
@@ -120,6 +125,7 @@ t/06-ticket-show.t
 t/07-sort-group.t
 t/attachment-content.t
 t/big-hm-rt.t
+t/config
 t/data/bplogo.gif
 t/data/sd-ticket-create-verbose.tmpl
 t/data/sd-ticket-create.tmpl
@@ -127,8 +133,10 @@ t/data/sd-ticket-update-all-props.tmpl
 t/data/sd-ticket-update-verbose-all-props.tmpl
 t/data/sd-ticket-update-verbose.tmpl
 t/data/sd-ticket-update.tmpl
+t/db.sqlite
 t/help.t
 t/no-email.t
+t/resolutions/db.sqlite
 t/scripts/ticket-comment-update-editor.pl
 t/scripts/ticket-create-editor.pl
 t/scripts/ticket-update-editor.pl
@@ -170,8 +178,9 @@ t/sd-trac/setup_trac.pl
 t/sd-usage.t
 t/sd-validation.t
 t/server.t
+tools/dump_sd_help.pl
 tools/shipwright-package
 tools/shipwright-package-minimal
-xt/00-dependencies.t
-xt/99-pod-coverage.t
-xt/99-pod.t
+xt/release/00-dependencies.t
+xt/release/99-pod-coverage.t
+xt/release/99-pod.t

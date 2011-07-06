@@ -1,7 +1,7 @@
 use inc::Module::Install;
 name('App-SD');
 author('Jesse Vincent and Chia-Liang Kao');
-copyright('2008-2009 Best Practical Solutions, LLC');
+#copyright('2008-2009 Best Practical Solutions, LLC');
 license('MIT');
 version_from('lib/App/SD.pm');
 
@@ -9,10 +9,12 @@ requires 'Prophet'; # URI Params::Validate Class::Accessor Template::Declare::Ta
 
 requires('DateTime');
 requires('Time::Progress');
-requires('HTML::TreeBuilder');
+# versions < 4.1 are buggy handling utf8
+requires('HTML::TreeBuilder' => '4.1');
 requires('DateTime::Format::Natural');
 requires('HTML::Tree');
 requires('URI::file');
+requires('Try::Tiny' => '0.02');
 
 build_requires('Test::Script::Run' => '0.02');
 
@@ -28,6 +30,8 @@ feature 'Hiveminder sync' => (
     -default => 0,
     'Net::Jifty' => 0.09,
     'Email::Address' => 0,
+    'Email::MIME' => 0,
+    'Path::Class' => 0,
 );
 
 recommends 'Net::Jifty';
@@ -37,7 +41,7 @@ recommends 'Email::Address';
 feature 'Trac sync' => (
     -default => 0,
     'LWP::Simple' => 0,
-    'Net::Trac' => 0.13,
+    'Net::Trac' => 0.16,
 );
 
 recommends 'Net::Trac';
@@ -52,7 +56,8 @@ recommends 'Net::Google::Code' => 0.14;
 
 feature 'GitHub sync (experimental)' => (
     -default => 0,
-    'Net::GitHub' => 0.18,
+    'Net::GitHub' => 0.28,
+    'Config::GitLike' => 1.03,
 );
 
 recommends 'Net::GitHub' => 0.18;

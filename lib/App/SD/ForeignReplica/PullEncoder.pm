@@ -3,6 +3,8 @@ use Any::Moose;
 use App::SD::Util;
 use Params::Validate qw/validate/;
 
+with 'Prophet::CLI::ProgressBar';
+
 sub run {
     my $self = shift;
     my %args = validate( @_, { after => 1});
@@ -20,18 +22,22 @@ sub run {
 
     my ( $last_modified, $last_txn, @changesets );
 
-    my $progress = Time::Progress->new();
-    $progress->attr( max => $#$tickets );
+    my $progress = $self->progress_bar(
+        max => $#$tickets,
+        format => "Fetching ticket history %30b %p Est: %E\r",
+    );
 
     for my $ticket (@$tickets) {
         $counter++;
         my $changesets;
-        print $progress->report( "Fetching ticket history %30b %p Est: %E\r", $counter );
+        $progress->();
         $self->sync_source->log_debug( "Fetching $counter of " . scalar @$tickets  . " tickets");
         ( $last_modified, $changesets ) = $self->transcode_ticket( $ticket, $last_modified );
         unshift @changesets, @$changesets;
     }
-    return [ sort { App::SD::Util::string_to_datetime($a->created) <=> App::SD::Util::string_to_datetime( $b->created) } @changesets];
+    my $sorted_changesets = [ sort {
+        $a->original_sequence_no <=> $b->original_sequence_no } @changesets ];
+    return $sorted_changesets;
 }
 
 sub ticket_last_modified { undef}
@@ -81,7 +87,8 @@ sub transcode_history {
         my $changeset = $self->transcode_one_txn( $txn, $initial_state, $final_state );
         next unless $changeset && $changeset->has_changes;
 
-        # the changesets are older than the ones that came before, so they goes first
+        # the changesets are older than the ones that came before, so they go
+        # first
         unshift @changesets, $changeset;
     }
     return ( $last_modified, \@changesets );
@@ -89,7 +96,7 @@ sub transcode_history {
 
 
 sub translate_ticket_state {
-    die 'translate_ticket_state must be mplemented';
+    die 'translate_ticket_state must be implemented';
 }
 
 sub warp_list_to_old_value {

@@ -73,6 +73,12 @@ by configuration file section):
       Bug property to determine order of display when displaying lists of
       tickets. (Can be any property; will be compared lexically.)
 
+    ticket.<prop>.sort-undef-last = true
+      When sorting on <prop>, setting this will make tickets where
+      the property is undefined sort *after* any records where the
+      property *is* defined. (The default is the opposite.)
+      Useful for e.g. due dates.
+
     ticket.default-group = milestone
       Bug property to group tickets by when displaying lists of tickets. (Can
       be any property.)
@@ -86,6 +92,11 @@ by configuration file section):
       Specifies an email address to use as the default for tickets'
       reporter field. (Overrides the EMAIL environmental variable if
       that is also set.)
+
+    server.default-port = 8080
+      Specifies a default port to use for the 'server' and 'browser'
+      commands. Can still be overridden by passing '--port' to these
+      commands.
 
 For information on environmental variables that can affect SD, see
 '${cmd}help environment'.

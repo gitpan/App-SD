@@ -5,6 +5,7 @@ with 'App::SD::CLI::NewReplicaCommand';
 
 sub ARG_TRANSLATIONS {
     shift->SUPER::ARG_TRANSLATIONS(),
+    # this arg is used in the new_replica_wizard sub
     n => 'non-interactive',
 };
 
@@ -13,11 +14,15 @@ sub usage_msg {
     my $cmd = $self->cli->get_script_name;
 
     return <<"END_USAGE";
-usage: ${cmd}clone --from <url> [--non-interactive]
+usage: ${cmd}clone --from <url> [--as <alias>] [--non-interactive] | --local
 
 Options:
     -n | --non-interactive - Don't prompt to specify email address for new
                              database
+    --as                   - Save an alias for this source, which can later be
+                             used instead of the URL.
+    --local                - Probe the local network for mDNS-advertised
+                             replicas and list them.
 END_USAGE
 }
 
@@ -30,6 +35,9 @@ override run => sub {
 
     Prophet::CLI->end_pager();
 
+    # Prompt for SD setup (specifically email address for changes) after the
+    # clone, but *don't* immediately edit the database's settings, since a
+    # cloned database should have already been setup previously.
     $self->new_replica_wizard( edit_settings => 0 );
 };
 

@@ -4,7 +4,7 @@ use App::SD::Config;
 
 extends 'Prophet::App';
 
-our $VERSION = '0.74';
+our $VERSION = '0.75';
 
 has '+config' => (
     default => sub {
@@ -52,3 +52,20 @@ __PACKAGE__->meta->make_immutable;
 
 no Any::Moose;
 1;
+
+__END__
+
+=head1 NAME
+
+App::SD - a distributed ticket tracking system
+
+=head1 DESCRIPTION
+
+SD is a peer to peer ticket tracking system built on the Prophet
+distributed database. SD is designed to make it easy to work with tickets
+and to share ticket databases with your collaborators.
+
+Please run C<sd help> for documentation and C<sd help intro> for an
+introduction to SD.
+
+=cut

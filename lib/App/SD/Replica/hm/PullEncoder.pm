@@ -31,6 +31,7 @@ sub transcode_one_txn {
     my $changeset = Prophet::ChangeSet->new(
         {   original_source_uuid => $self->sync_source->uuid,
             original_sequence_no => $txn->{'id'},
+            creator => $self->sync_source->user_info( id => $txn->{'created_by'} )->{'email'},
         }
     );
 
@@ -42,6 +43,8 @@ sub transcode_one_txn {
     my $change = $self->$method( task => $ticket_final, transaction => $txn );
 
     $changeset->add_change( { change => $change } );
+
+    # XXX is this tested at all? this method doesn't exist
     for my $email ( @{ $txn->{email_entries} } ) {
         if ( my $sub = $self->can( '_recode_email_' . 'blah' ) ) {
             $sub->(
@@ -120,10 +123,10 @@ sub add_prop_change {
     my $self = shift;
     my %args = validate( @_, { history_entry => 1, previous_state => 1, change => 1 } );
 
-
-    my $field = $args{'history_entry'}{'field'} ||'';
-    my $old   = $args{'history_entry'}{'old_value'} ||'';
-    my $new   = $args{'history_entry'}{'new_value'} ||'';
+    no warnings 'uninitialized';
+    my $field = qq{$args{'history_entry'}{'field'}} ||'';
+    my $old   = qq{$args{'history_entry'}{'old_value'}} ||'';
+    my $new   = qq{$args{'history_entry'}{'new_value'}} ||'';
 
     if ( $args{'previous_state'}->{$field} eq $new ) {
         $args{'previous_state'}->{$field} = $old;
@@ -151,8 +154,9 @@ sub recode_create {
         for qw(id record_locator);
 
     while ( my ( $k, $v ) = each %{ $args{'task'} } ) {
-        $res->add_prop_change( { name => $k, old => undef, new => $v } );
+        $res->add_prop_change( name => $k, old => undef, new => $v );
     }
+
     return $res;
 }
 
@@ -178,6 +182,56 @@ sub recode_update {
     return $res;
 }
 
+# This is a comment, basically.
+sub recode_email {
+    my $self = shift;
+    my %args = validate( @_, { task => 1, transaction => 1 } );
+
+    # I *think* we should only ever have one email entry at a time, but let's
+    # check to make sure
+    if ( scalar @{$args{'transaction'}->{'email_entries'}} > 1 ) {
+        use Data::Dumper;
+        die "more than one entry in email_entries:\n"
+            . Dumper($args{'transaction'}->{'email_entries'});
+    }
+
+    my $ticket_uuid = $self->sync_source->uuid_for_remote_id( $args{'transaction'}->{'task_id'} );
+
+    my $comment = Prophet::Change->new(
+        {   record_type => 'comment',
+            record_uuid => $self->sync_source->uuid_for_remote_id(
+                                $args{'transaction'}->{'id'} ),
+            change_type => 'add_file',
+        }
+    );
+    # we're assuming non-multipart messages...
+    use Email::MIME;
+    my $parsed = Email::MIME->new(
+        $args{'transaction'}->{'email_entries'}->[0]->{'message'} );
+    my $content = $parsed->body_str();
+    # we ignore the headers on the email since we can get sender from elsewhere
+
+    $comment->add_prop_change(
+        name => 'content',
+        new => $content,
+    );
+
+    $comment->add_prop_change(
+        name => 'created',
+        new => $args{'txn'}->{'modified_at'}, # already UTC and correct format
+    );
+
+    $comment->add_prop_change( name => 'ticket', new => $ticket_uuid );
+
+    # XXX do we always want to be using text/plain?
+    $comment->add_prop_change(
+        name => 'content_type',
+        new => 'text/plain',
+    );
+
+    return $comment;
+}
+
 sub translate_props {
     my $self      = shift;
     my $changeset = shift;
@@ -197,8 +251,9 @@ sub translate_props {
             }
 
             if ($prop->name =~ /^(?:due|completed_at|created_at)$/) {
-                $prop->old_value(App::SD::Util::string_to_datetime($prop->old_value));
-                $prop->new_value(App::SD::Util::string_to_datetime($prop->new_value));
+                no warnings 'uninitialized';
+                $prop->old_value(App::SD::Util::string_to_datetime($prop->old_value)."");
+                $prop->new_value(App::SD::Util::string_to_datetime($prop->new_value)."");
 
              }
 

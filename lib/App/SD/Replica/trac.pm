@@ -5,24 +5,27 @@ extends qw/App::SD::ForeignReplica/;
 use Params::Validate qw(:all);
 use File::Temp 'tempdir';
 use Memoize;
+use Try::Tiny;
 
 use constant scheme => 'trac';
 use constant pull_encoder => 'App::SD::Replica::trac::PullEncoder';
 use constant push_encoder => 'App::SD::Replica::trac::PushEncoder';
 
-
-use Prophet::ChangeSet;
-
-has trac => ( isa => 'Net::Trac::Connection', is => 'rw');
-has remote_url => ( isa => 'Str', is => 'rw');
-has query => ( isa => 'Maybe[Str]', is => 'rw');
-sub foreign_username { return shift->trac->user(@_) }
+has trac             => ( isa => 'Net::Trac::Connection', is => 'rw');
+has remote_url       => ( isa => 'Str', is                   => 'rw');
+has query            => ( isa => 'Maybe[Str]', is            => 'rw');
+has foreign_username => ( isa => 'Str', is                   => 'rw' );
 
 sub BUILD {
     my $self = shift;
 
     # Require rather than use to defer load
-    require Net::Trac;
+    try {
+        require Net::Trac;
+    } catch {
+        die "SD requires Net::Trac to sync with a Trac server.\n".
+        "'cpan Net::Trac' may sort this out for you.\n";
+    };
 
     my ( $server, $type, $query ) = $self->{url} =~ m/^trac:(.*?)$/
         or die
@@ -35,11 +38,24 @@ sub BUILD {
     }
     $self->remote_url( $uri->as_string );
 
-    ( $username, $password )
-        = $self->prompt_for_login(
+    if ( $password ) {
+        try {
+            $self->_trac_login( $username, $password );
+        } catch {
+            die "Bad username or password specified in URL!\n";
+        };
+    }
+    else {
+        ($username, $password) = $self->login_loop(
             uri      => $uri,
             username => $username,
-        ) unless $password;
+            login_callback => \&_trac_login,
+        );
+    }
+}
+
+sub _trac_login {
+    my ($self, $username, $password) = @_;
 
     $self->trac(
         Net::Trac::Connection->new(
@@ -48,10 +64,11 @@ sub BUILD {
             password => $password,
         )
     );
-    $self->trac->ensure_logged_in;
+
+    # Net::Trac doesn't give us enough information
+    # to give a better diagnostic message, unfortunately
+    die "login failed!\n" unless $self->trac->ensure_logged_in;
 }
-
-
 
 sub get_txn_list_by_date {
     my $self   = shift;
@@ -59,8 +76,12 @@ sub get_txn_list_by_date {
 
     my $ticket_obj = Net::Trac::Ticket->new( connection => $self->trac);
     $ticket_obj->load($ticket);
-        
-    my @txns   = map { { id => $_->date->epoch, creator => $_->author, created => $_->date->epoch } } sort {$b->date <=> $a->date }  @{$ticket_obj->history->entries};
+
+    my @txns   = map {
+        { id => $_->date->epoch, creator => $_->author,
+          created => $_->date->epoch }
+    } sort {$b->date <=> $a->date }  @{$ticket_obj->history->entries};
+
     return @txns;
 }
 
@@ -70,9 +91,9 @@ Return the replica's UUID
 
 =cut
 
-sub uuid {
+sub _uuid_url {
     my $self = shift;
-    return $self->uuid_for_url( $self->remote_url);
+    return $self->remote_url;
 }
 
 sub remote_uri_path_for_comment {
@@ -112,7 +133,6 @@ sub database_settings {
         statuses => [ @active_statuses, 'closed', @resolutions ],
     };
 }
-
 
 __PACKAGE__->meta->make_immutable;
 no Any::Moose;

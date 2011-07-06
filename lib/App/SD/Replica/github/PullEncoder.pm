@@ -4,8 +4,9 @@ extends 'App::SD::ForeignReplica::PullEncoder';
 
 use Params::Validate qw(:all);
 use Memoize;
-use Time::Progress;
 use DateTime;
+
+use App::SD::Util;
 
 has sync_source => (
     isa => 'App::SD::Replica::github',
@@ -27,6 +28,11 @@ sub translate_ticket_state {
     my $self   = shift;
     my $ticket = shift;
 
+    $ticket->{created_at} =
+        App::SD::Util::string_to_datetime($ticket->{created_at});
+    $ticket->{updated_at} =
+        App::SD::Util::string_to_datetime($ticket->{updated_at});
+
     return $ticket;
 }
 
@@ -41,16 +47,9 @@ sub find_matching_tickets {
     my %query                  = (@_);
     my $last_changeset_seen_dt = $self->_only_pull_tickets_modified_after()
       || DateTime->from_epoch( epoch => 0 );
-    $last_changeset_seen_dt->set_time_zone( '-0700' );
-    my $dt = $last_changeset_seen_dt;
-    my $last_dt_str = sprintf(
-        "%4d/%02d/%02d %02d:%02d:%02d -0700",
-        $dt->year, $dt->month,  $dt->day,
-        $dt->hour, $dt->minute, $dt->second
-    );
     my $issue = $self->sync_source->github->issue;
-    my @updated =
-      grep { $_->{updated_at} ge $last_dt_str }
+    my @updated = grep {
+        App::SD::Util::string_to_datetime($_->{updated_at}) > $last_changeset_seen_dt }
       ( @{ $issue->list('open') }, @{ $issue->list('closed') } );
     return \@updated;
 }
@@ -67,7 +66,10 @@ sub _only_pull_tickets_modified_after {
 
 =head2 find_matching_transactions { ticket => $id, starting_transaction => $num  }
 
-Returns a reference to an array of all transactions (as hashes) on ticket $id after transaction $num.
+Returns a reference to an array of all transactions (as hashes) on ticket $id
+after transaction $num.
+
+For GitHub, we can't get change history for tickets; we can only get comments.
 
 =cut
 
@@ -78,13 +80,15 @@ sub find_matching_transactions {
       @{ $self->sync_source->github->issue->comments( $args{ticket}->{number} ) };
 
     for my $comment (@raw_txns) {
-        $comment->{date} =
-          App::SD::Util::string_to_datetime( $comment->{date} );
+        $comment->{updated_at} =
+          App::SD::Util::string_to_datetime( $comment->{updated_at} );
+        $comment->{created_at} =
+          App::SD::Util::string_to_datetime( $comment->{created_at} );
     }
 
     my @txns;
     for my $txn ( sort { $a->{id} <=> $b->{id} } @raw_txns ) {
-        my $txn_date = $txn->{date}->epoch;
+        my $txn_date = $txn->{updated_at}->epoch;
 
         # Skip things we know we've already pulled
         next if $txn_date < ( $args{'starting_transaction'} || 0 );
@@ -99,12 +103,14 @@ sub find_matching_transactions {
         # ok. it didn't originate locally. we might want to integrate it
         push @txns,
           {
-            timestamp => $txn->{date},
+            timestamp => $txn->{created_at},
             serial    => $txn->{id},
             object    => $txn,
           };
     }
 
+    # if the ticket itself hasn't been created, add it to the beginning
+    # of the list of transactions
     my $ticket_created =
       App::SD::Util::string_to_datetime( $args{ticket}->{created_at} );
     if ( $ticket_created->epoch >= $args{'starting_transaction'} || 0 ) {
@@ -124,6 +130,7 @@ sub find_matching_transactions {
 sub transcode_create_txn {
     my $self        = shift;
     my $txn         = shift;
+
     my $ticket      = $txn->{object};
     my $ticket_uuid = 
           $self->sync_source->uuid_for_remote_id($ticket->{number});
@@ -147,12 +154,17 @@ sub transcode_create_txn {
         }
     );
 
-    for my $prop (qw/title body state/) {
+    for my $prop (qw/title state/) {
         $change->add_prop_change(
             name => $PROP_MAP{$prop} || $prop,
             new => $ticket->{$prop},
         );
     }
+    # stringify datetime before saving
+    $change->add_prop_change(
+        name => $PROP_MAP{created_at},
+        new  => App::SD::Util::datetime_to_string($ticket->{created_at}),
+    );
 
     $change->add_prop_change(
         name => $self->sync_source->uuid . '-id',
@@ -160,6 +172,8 @@ sub transcode_create_txn {
     );
 
     $changeset->add_change( { change => $change } );
+
+    $self->_include_change_comment( $changeset, $ticket_uuid, $txn->{object} );
 
     return $changeset;
 }
@@ -187,8 +201,8 @@ sub transcode_one_txn {
             original_source_uuid => $ticket_uuid,
             original_sequence_no => $txn->{id},
             creator =>
-              $self->resolve_user_id_to( email_address => $txn->{author} ),
-            created => $txn->{date}->ymd . " " . $txn->{date}->hms
+              $self->resolve_user_id_to( email_address => $txn->{user} ),
+            created => $txn->{created_at}->ymd . " " . $txn->{created_at}->hms
         }
     );
 
@@ -200,22 +214,20 @@ sub transcode_one_txn {
 
 sub _include_change_comment {
     my $self        = shift;
-    my $changeset   = shift;
-    my $ticket_uuid = shift;
-    my $txn         = shift;
+    my ($changeset, $ticket_uuid, $txn) = @_;
 
     my $comment = $self->new_comment_creation_change();
 
-    if ( my $content = $txn->{content} ) {
+    if ( my $content = $txn->{body} ) {
         if ( $content !~ /^\s*$/s ) {
             $comment->add_prop_change(
                 name => 'created',
-                new  => $txn->{date}->ymd . ' ' . $txn->{date}->hms,
+                new  => $txn->{created_at}->ymd . ' ' . $txn->{created_at}->hms,
             );
             $comment->add_prop_change(
                 name => 'creator',
                 new =>
-                  $self->resolve_user_id_to( email_address => $txn->{author} ),
+                  $self->resolve_user_id_to( email_address => $txn->{user} ),
             );
             $comment->add_prop_change( name => 'content', new => $content );
             $comment->add_prop_change(

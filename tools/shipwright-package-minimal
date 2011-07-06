@@ -15,9 +15,16 @@ $IMPORT \
 cd /tmp
 shipwright maintain -r $GIT_PATH --update-order
 cd /tmp
+
 git clone file://${REPO} hack-$$
-cd hack-$$/scripts/cpan-DateTime-Format-Natural
+cd /tmp/hack-$$/sources/cpan-Lingua-EN-Inflect/vendor
+git mv Build.pl Build.PL
+cd /tmp/hack-$$/scripts/cpan-DateTime-Format-Natural
 perl -pi -e 's/Build test/Build/g' build
+
+cd /tmp/hack-$$/scripts/cpan-Net-DNS
+perl -pi -e 's/make:/make: COMMAND_MODE=unix2003/' build
+git commit -m 'hack COMMAND_MODE to make Net-DNS happy on mac' build
 
 cd /tmp/hack-$$/scripts/cpan-Params-Util
 perl -pi -e 's/Makefile.PL/Makefile.PL -pm/g' build
@@ -39,9 +46,13 @@ rm -rf hack-$$
 
 git clone file://$REPO /tmp/sdex-$$
 cd /tmp/sdex-$$ 
+rm -rf .git
+
 echo "# one argument per line
 --skip-man-pages
 --skip-test
 --install-base=~/sd
 " > __default_builder_options 
 ./bin/shipwright-utility --generate-tar-file /tmp/sd-image-${TODAY}.bin
+
+rm -rf /tmp/sdex-$$

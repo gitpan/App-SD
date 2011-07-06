@@ -2,10 +2,11 @@ package App::SD::Replica::hm;
 use Any::Moose;
 extends 'App::SD::ForeignReplica';
 use Params::Validate qw(:all);
-use URI;
 use Memoize;
 use Prophet::ChangeSet;
 use File::Temp 'tempdir';
+use Carp;
+use Try::Tiny;
 
 has hm               => ( isa => 'Net::Jifty', is => 'rw' );
 has remote_url       => ( isa => 'Str',        is => 'rw' );
@@ -29,50 +30,102 @@ Open a connection to the source identified by C<$self->{url}>.
 
 sub BUILD {
     my $self = shift;
-    require Net::Jifty;
+
+    # Require rather than use to defer load
+    try {
+        require Net::Jifty;
+    } catch {
+        die "SD requires Net::Jifty to sync with a Hiveminder server.\n".
+        "'cpan Net::Jifty' may sort this out for you";
+    };
+
     my ( $server, $props ) = $self->{url} =~ m/^hm:(.*?)(?:\|(.*))?$/
         or die
         "Can't parse Hiveminder server spec. Expected hm:http://hiveminder.com or hm:http://hiveminder.com|props";
-    $self->url($server);
-    my $uri = URI->new($server);
-    my ( $username, $password );
-    if ( $uri->can('userinfo') && ( my $auth = $uri->userinfo ) ) {
-        ( $username, $password ) = split /:/, $auth, 2;
-        $uri->userinfo(undef);
-    }
-    $self->remote_url("$uri");
-    $self->foreign_username($username) if ($username);
 
-    ( $username, $password )
-        = $self->prompt_for_login(
-            uri      => $uri,
+    my ($username, $password) = $self->extract_auth_from_uri($server);
+
+    if ( $password ) {
+        try {
+            $self->_hiveminder_login($username, $password);
+        } catch {
+            die "Bad username or password specified in URL! ".
+                "Error message was:\n".
+                _hiveminder_clean_login_error($_);
+        };
+    }
+    else {
+        ($username, $password) = $self->login_loop(
+            uri      => $self->remote_url,
             username => $username,
-        ) unless $password;
+            # remind the user that hiveminder logins are email addresses
+            username_prompt => sub {
+                my $uri = shift;
+                return "Login email for $uri: ";
+            },
+            login_callback => \&_hiveminder_login,
+            catch_callback => sub {
+                my ($verbose_error) = @_;
+                warn _hiveminder_clean_login_error($verbose_error);
+            },
+        );
+    }
+    $self->foreign_username($username);
 
     if ($props) {
         my %props = split /=|;/, $props;
         $self->props( \%props );
     }
+}
+
+sub _hiveminder_login {
+    my ($self, $username, $password) = @_;
     $self->hm(
         Net::Jifty->new(
             site        => $self->remote_url,
             cookie_name => 'JIFTY_SID_HIVEMINDER',
-
             email    => $username,
             password => $password
         )
     );
 }
 
-=head2 uuid
+sub _hiveminder_clean_login_error {
+    my $verbose_error = shift;
+    # Net::Jifty uses Carp::confess to deal with login problems :(
+    my $error_message = (split /\n/, $verbose_error)[0];
+    $error_message =~ s/ at .* line [0-9]+$//;
+    return "\n$error_message\n\n";
+}
+
+sub request_failed {
+    my ($self, $response) = @_;
+
+    return defined($response->{success}) && $response->{success} == 0;
+}
+
+sub decode_error {
+    my $self   = shift;
+    my $status = shift;
+    my $msg    = '';
+    $msg .= $status->{'error'} if defined $status->{'error'};
+    if ( $status->{'field_errors'} ) {
+        while ( my ( $k, $v ) = each %{ $status->{'field_errors'} } ) {
+            $msg .= "field '$k' - '$v'\n";
+        }
+    }
+    return $msg;
+}
+
+=head2 _uuid_url
 
 Return the replica's UUID
 
 =cut
 
-sub uuid {
+sub _uuid_url {
     my $self = shift;
-    return $self->uuid_for_url( join( '/', $self->remote_url, $self->foreign_username ) );
+    return  join( '/', $self->remote_url, $self->foreign_username ) ;
 }
 
 sub get_txn_list_by_date {
@@ -106,7 +159,11 @@ sub _user_info {
     my $value = shift;
     return undef unless defined $value;
     my $status = $self->hm->search('User', $key => $value);
-    die $status->{'error'} unless $status->[0]->{'id'};
+    unless ( $status->[0]->{'id'} ) {
+        # some weird error
+        warn "fatal error in _user_info\n";
+        Carp::confess;
+    }
     return $status->[0];
 }
 memoize '_user_info';
@@ -123,7 +180,7 @@ our %PROP_MAP = (
     priority                 => 'priority_integer',
     completed_at             => 'completed',
     due                      => 'due',
-    creator                  => 'creator',
+    created_by               => 'creator',
     milestone                => '_delete',
     attachment_count         => '_delete',
     depended_on_by_count     => '_delete',

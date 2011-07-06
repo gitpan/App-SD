@@ -3,6 +3,7 @@ use Any::Moose;
 use Params::Validate;
 use Net::Google::Code::Issue;
 use Net::Google::Code;
+use Try::Tiny;
 
 has sync_source => (
     isa => 'App::SD::Replica::gcode',
@@ -29,17 +30,37 @@ sub integrate_change {
         $changeset->original_source_uuid ) >= $changeset->original_sequence_no;
 
     my $before_integration = time();
-    my ( $email, $password );
-    if ( !$self->sync_source->gcode->password ) {
-        ( $email, $password )
-            = $self->sync_source->prompt_for_login(
-                uri => 'gcode:' . $self->sync_source->project,
-            );
-        $self->sync_source->gcode->email($email);
-        $self->sync_source->gcode->password($password);
-    }
 
-    eval {
+    # grab any email/password that may have been specified in the --to url
+    my ( $email, $password ) = ($self->sync_source->gcode->email,
+                                $self->sync_source->gcode->password);
+
+    ($email, $password) = $self->sync_source->login_loop(
+        uri => 'gcode:' . $self->sync_source->project,
+        username => $email, password => $password,
+        # remind the user that gcode logins are email addresses
+        username_prompt => sub {
+            my $project = shift;
+            return "Login email for $project: ";
+        },
+        login_callback => sub {
+            my ($self, $email, $password) = @_;
+
+            # gcode.pm's BUILD has already been called, so we don't need to
+            # create the initial object, just specify auth
+            $self->gcode->email($email);
+            $self->gcode->password($email);
+            $self->gcode->sign_in;
+        },
+        catch_callback => sub {
+            my $error = shift;
+            $error =~ s/at .* line [0-9]+\.//;
+
+            warn "\n$error\n";
+        },
+    );
+
+    try {
         if (    $change->record_type eq 'ticket'
             and $change->change_type eq 'add_file' )
         {
@@ -73,11 +94,9 @@ sub integrate_change {
             ticket     => $id,
             changeset  => $changeset,
         );
+    } catch {
+        $self->sync_source->log( "Push error: " . $_ );
     };
-
-    if ( my $err = $@ ) {
-        $self->sync_source->log( "Push error: " . $err );
-    }
 
     return $id;
 }

@@ -7,8 +7,6 @@ use Memoize;
 
 use URI;
 use Memoize;
-use Net::Lighthouse::Project;
-use Net::Lighthouse::User;
 
 use Prophet::ChangeSet;
 
@@ -26,6 +24,16 @@ our %PROP_MAP = ( state => 'status', title => 'summary' );
 
 sub BUILD {
     my $self = shift;
+
+    eval {
+        require Net::Lighthouse::Project;
+        require Net::Lighthouse::User;
+    };
+    if ($@) {
+        die "SD requires Net::Lighthouse to sync with a Lighthouse server.\n".
+        "'cpan Net::Lighthouse' may sort this out for you";
+    }
+
 
     my ( $auth, $account, $project, $query ) =
       $self->{url} =~ m{^lighthouse:(?:(.*)@)?(.*?)/(.*?)(?:/(.*))?$}
@@ -141,10 +149,10 @@ sub foreign_username {
     }
 }
 
-sub uuid {
+sub _uuid_url {
     my $self = shift;
     Carp::cluck "- can't make a uuid for this" unless ($self->remote_url && $self->account && $self->project );
-    return $self->uuid_for_url( join( '/', $self->remote_url, $self->project ) );
+    return  join( '/', $self->remote_url, $self->project );
 }
 
 sub remote_uri_path_for_comment {

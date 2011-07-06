@@ -32,10 +32,11 @@ on qr'^(?!help)' => sub {
 };
 
 under help => sub {
-    on [ [ 'intro', 'init', 'clone' ] ]   => run_command('Help::Intro');
+    on [ [ 'intro', 'init' ] ]   => run_command('Help::Intro');
     on about   => run_command('Help::About');
     on config  => run_command('Help::Config');
     on copying => run_command('Help::Copying');
+    on commands => run_command('Help::Commands');
     on [ ['summary-format', 'ticket.summary-format', 'ticket_summary_format'] ]
         => run_command('Help::ticket_summary_format');
 
@@ -59,7 +60,7 @@ under help => sub {
 
     on [ ['search', 'list', 'find'] ] => run_command('Help::Search');
 
-    on [ ['sync', 'push', 'pull', 'publish', 'server','clone'] ]
+    on [ ['sync', 'push', 'pull', 'publish', 'server', 'browser', 'clone'] ]
         => run_command('Help::Sync');
 
     on qr/^(\S+)$/ => sub {
@@ -74,7 +75,8 @@ on help => run_command('Help');
 on qr'.*' => sub {
     my $self = shift;
 
-    unless ( $self->cli->app_handle->local_replica_url ) {
+    unless ( $self->cli->app_handle->local_replica_url ||
+        $self->cli->context->has_arg('h') ) {
 
         print join "\n",
             "",
@@ -129,6 +131,7 @@ under ticket => sub {
     on [ [ 'show'   , 'display' ] ]   => run_command('Ticket::Show');
     on [ [ 'update' , 'edit' ] ]      => run_command('Ticket::Update');
     on [ [ 'search', 'list', 'ls' ] ] => run_command('Ticket::Search');
+    on review   => run_command('Ticket::Review');
     on details  => run_command('Ticket::Details');
     on basics   => run_command('Ticket::Basics');
     on comment  => run_command('Ticket::Comment');
